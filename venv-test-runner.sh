@@ -5,6 +5,17 @@ set -e
 PYTHON_VERSION="python3"
 PIP_VERSION="pip"
 VENV_ACTIVATE="/bin/activate"
+VERBOSE=false
+
+function log() {
+    if [ "$VERBOSE" = true ]; then
+        echo "[INFO] $1"
+    fi
+}
+
+function error_log() {
+    echo "[ERROR] $1" >&2
+}
 
 function does_venv_exist(){
     # Checks if either a passed in path is a venv or if VENV_PATH is a venv based on if VENV_ACTIVATE exists
@@ -14,11 +25,11 @@ function does_venv_exist(){
         local venv_path_to_check=$VENV_PATH
     fi
 
-    if [ -f $venv_path_to_check$VENV_ACTIVATE ]; then
-        echo "does_venv_exist: $venv_path_to_check exists as a venv"
+    if [ -f "$venv_path_to_check/$VENV_ACTIVATE" ]; then
+        log "does_venv_exist: $venv_path_to_check exists as a venv"
         return 0
     fi
-    echo "does_venv_exist: $venv_path_to_check does not exist as a venv"
+    error_log "does_venv_exist: $venv_path_to_check does not exist as a venv"
     return 1
 }
 
@@ -27,32 +38,33 @@ function does_requirements_dot_txt_exist(){
     if [ "$1" ]; then
         local requirements_dot_txt_path_to_check=$1
     else
-        echo "does_requirements_dot_txt_exist: No valid parameter passed in"
+        error_log "does_requirements_dot_txt_exist: No valid parameter passed in"
         return 1
     fi
 
     if [ -f $requirements_dot_txt_path_to_check ]; then
-        echo "does_requirements_dot_txt_exist: $requirements_dot_txt_path_to_check exists as a requirements.txt"
+        log "does_requirements_dot_txt_exist: $requirements_dot_txt_path_to_check exists as a requirements.txt"
         return 0
     fi
-    echo "does_requirements_dot_txt_exist: $requirements_dot_txt_path_to_check does not exist a requirements.txt"
+    error_log "does_requirements_dot_txt_exist: $requirements_dot_txt_path_to_check does not exist a requirements.txt"
     return 1
 }
+
 
 function does_bash_script_exist(){
     # Checks if bash scrit exists
     if [ "$1" ]; then
         local bash_script_to_check=$1
     else
-        echo "does_bash_script_exist: No valid parameter passed in"
+        error_log "does_bash_script_exist: No valid parameter passed in"
         return 1
     fi
 
     if [ -x $bash_script_to_check ]; then
-        echo "does_bash_script_exist: $bash_script_to_check exists as a bash script"
+        log "does_bash_script_exist: $bash_script_to_check exists as a bash script"
         return 0
     fi
-    echo "does_bash_script_exist: $bash_script_to_check does not exist as a bash script or is not execuable"
+    error_log "does_bash_script_exist: $bash_script_to_check does not exist as a bash script or is not execuable"
     return 1
 }
 
@@ -61,12 +73,12 @@ function create_venv(){
     if [ "$1" ]; then
         local venv_path_to_create=$VENV_PATH
     else
-        local venv_path_to_check=$(mktemp --directory)
+        local venv_path_to_create=$(mktemp --directory)
     fi
-    echo "create_venv: Creating a venv at - $venv_path_to_check"
+    log "create_venv: Creating a venv at - $venv_path_to_create"
 
-    $PYTHON_VERSION -m venv $venv_path_to_check
-    VENV_PATH=$venv_path_to_check
+    $PYTHON_VERSION -m venv $venv_path_to_create
+    VENV_PATH=$venv_path_to_create
 }
 
 function activate_venv(){
@@ -76,7 +88,12 @@ function activate_venv(){
     else
         local venv_path_to_activate=$VENV_PATH
     fi
-    echo "activate_venv: Activating venv - $venv_path_to_check"
+
+    if venv_path_to_activate $VENV_PATH; then
+        error_log "activate_venv: $venv_path_to_activate does not exist as a venv"
+        return 1
+    fi
+    log "activate_venv: Activating venv - $venv_path_to_activate"
 
     source $venv_path_to_activate$VENV_ACTIVATE
 }
@@ -91,7 +108,7 @@ function pip_install(){
     if [ "$1" ]; then
         local to_install=$1
     else
-        echo "pip_install: Nothing to install"
+        error_log "pip_install: Nothing to install"
         return 1
     fi
     local install_args=''
@@ -109,7 +126,7 @@ function run_cli_test(){
     if [ "$1" ]; then
         local cli_test_path=$1
     else
-        echo "run_cli_test: Nothing to run"
+        error_log "run_cli_test: Nothing to run"
         return 1
     fi
     activate_venv $VENV_PATH
@@ -134,13 +151,14 @@ function usage() {
     echo "  -i, --install FILE        Install dependencies from requirements FILE"
     echo "  -t, --test FILE           Run CLI test from bash script FILE"
     echo "  -p, --venv PATH           Specify virtual environment path (optional)"
+    echo "  -v, --verbose             Enable verbose output"
     echo "  -h, --help                Display this help message"
     exit 1
 }
 
 trap clean_up EXIT
 
-OPTS=$(getopt -o ci:t:p:h --long create,install:,test:,venv:,help -n 'venv-test-runner' -- "$@")
+OPTS=$(getopt -o ci:t:p:hv --long create,install:,test:,venv:,help,verbose -n 'venv-test-runner' -- "$@")
 
 if [ $? != 0 ]; then
     usage
@@ -167,6 +185,9 @@ while true; do
         -p|--venv)
             VENV_PATH="$2"
             shift 2 ;;
+        -v|--verbose)
+            VERBOSE=true
+            shift ;;
         -h|--help)
             usage ;;
         --)
@@ -179,7 +200,7 @@ done
 
 
 if [ "$ACTION_CREATE" = true ] || [ "$ACTION_INSTALL" = true ] || [ "$ACTION_TEST" = true ]; then
-    create_venv
+    create_venv $VENV_PATH
 fi
 
 if [ "$ACTION_INSTALL" = true ]; then
