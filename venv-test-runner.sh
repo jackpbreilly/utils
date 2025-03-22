@@ -42,7 +42,7 @@ function does_requirements_dot_txt_exist(){
         return 1
     fi
 
-    if [ -f $requirements_dot_txt_path_to_check ]; then
+    if [ -f "$requirements_dot_txt_path_to_check" ]; then
         log "does_requirements_dot_txt_exist: $requirements_dot_txt_path_to_check exists as a requirements.txt"
         return 0
     fi
@@ -60,7 +60,7 @@ function does_bash_script_exist(){
         return 1
     fi
 
-    if [ -x $bash_script_to_check ]; then
+    if [ -x "$bash_script_to_check" ]; then
         log "does_bash_script_exist: $bash_script_to_check exists as a bash script"
         return 0
     fi
@@ -70,14 +70,16 @@ function does_bash_script_exist(){
 
 function create_venv(){
     # Creates a venv from a passed in path or if not passed in will create one using mktemp
+    local venv_path_to_create
+
     if [ "$1" ]; then
-        local venv_path_to_create=$VENV_PATH
+        venv_path_to_create=$VENV_PATH
     else
-        local venv_path_to_create=$(mktemp --directory)
+        venv_path_to_create=$(mktemp --directory)
     fi
     log "create_venv: Creating a venv at - $venv_path_to_create"
 
-    $PYTHON_VERSION -m venv $venv_path_to_create
+    $PYTHON_VERSION -m venv "$venv_path_to_create"
     VENV_PATH=$venv_path_to_create
 }
 
@@ -89,13 +91,14 @@ function activate_venv(){
         local venv_path_to_activate=$VENV_PATH
     fi
 
-    if venv_path_to_activate $VENV_PATH; then
+    if venv_path_to_activate "$VENV_PATH"; then
         error_log "activate_venv: $venv_path_to_activate does not exist as a venv"
         return 1
     fi
     log "activate_venv: Activating venv - $venv_path_to_activate"
 
-    source $venv_path_to_activate$VENV_ACTIVATE
+    # shellcheck source=/dev/null
+    source "$venv_path_to_activate/$VENV_ACTIVATE"
 }
 
 function deactivate_venv(){
@@ -112,12 +115,12 @@ function pip_install(){
         return 1
     fi
     local install_args=''
-    if does_requirements_dot_txt_exist $to_install; then
+    if does_requirements_dot_txt_exist "$to_install"; then
         install_args='-r'
     fi
 
-    activate_venv $VENV_PATH
-    $PIP_VERSION install $install_args $to_install
+    activate_venv "$VENV_PATH"
+    $PIP_VERSION install $install_args "$to_install"
     deactivate_venv
 }
 
@@ -129,17 +132,17 @@ function run_cli_test(){
         error_log "run_cli_test: Nothing to run"
         return 1
     fi
-    activate_venv $VENV_PATH
-    
-    if does_bash_script_exist $cli_test_path; then
+    activate_venv "$VENV_PATH"
+
+    if does_bash_script_exist "$cli_test_path"; then
         $cli_test_path
     fi
     deactivate_venv
 }
 
 function clean_up(){
-    if does_venv_exist $VENV_PATH; then
-        rm -rf $VENV_PATH
+    if does_venv_exist "$VENV_PATH"; then
+        rm -rf "$VENV_PATH"
     fi
 }
 
@@ -159,10 +162,6 @@ function usage() {
 trap clean_up EXIT
 
 OPTS=$(getopt -o ci:t:p:hv --long create,install:,test:,venv:,help,verbose -n 'venv-test-runner' -- "$@")
-
-if [ $? != 0 ]; then
-    usage
-fi
 
 eval set -- "$OPTS"
 ACTION_CREATE=false
@@ -200,13 +199,13 @@ done
 
 
 if [ "$ACTION_CREATE" = true ] || [ "$ACTION_INSTALL" = true ] || [ "$ACTION_TEST" = true ]; then
-    create_venv $VENV_PATH
+    create_venv "$VENV_PATH"
 fi
 
 if [ "$ACTION_INSTALL" = true ]; then
-    pip_install $(realpath $REQUIREMENTS_PATH)
+    pip_install "$(realpath "$REQUIREMENTS_PATH")"
 fi
 
 if [ "$ACTION_TEST" = true ]; then
-    run_cli_test $(realpath $CLI_TEST_PATH)
+    run_cli_test "$(realpath "$CLI_TEST_PATH")"
 fi
